@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Team Members{% endblock %}
+
+{% block content %}
+  <div class="dashboard-header">
+    <div>
+      <h1>Team Members</h1>
+      <p class="muted">See who’s on track, who’s blocked, and where to help</p>
+      <p class="muted small" id="countSummary" style="margin-top:6px;">Showing 0 of 0</p>
+    </div>
+
+    <!-- Controls (server + client) -->
+    <form class="header-actions" method="get" action="{{ url_for('person') }}">
+      <input name="q" id="peopleSearch" class="input" type="text" placeholder="Search name, tags, work…" value="{{ q or '' }}" style="min-width:260px;">
+      <select name="status" id="statusFilter" class="input" style="min-width:180px;">
+        <option value="" {% if not status_filter %}selected{% endif %}>All statuses</option>
+        <option value="blocked" {% if status_filter=='blocked' %}selected{% endif %}>Blocked</option>
+        <option value="needs check-in" {% if status_filter=='needs check-in' %}selected{% endif %}>Needs Check-in</option>
+        <option value="on track" {% if status_filter=='on track' %}selected{% endif %}>On Track</option>
+      </select>
+      <a class="btn" href="{{ url_for('person') }}" title="Clear">Clear</a>
+      <button class="btn" type="submit" title="Apply">Filter</button>
+    </form>
+  </div>
+
+  <!-- AI Insights -->
+  <div class="card accent-blue" style="margin-bottom:16px;">
+    <h3 style="margin:0 0 8px 0;">AI Insights</h3>
+    {% if insights and insights|length %}
+      <ul class="suggestions" style="margin:6px 0 0 18px; padding:0 0 0 4px;">
+        {% for s in insights %}
+          <li style="margin:6px 0;">{{ s }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted" style="margin:6px 0 0;">No significant signals yet.</p>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('team_send_checkins') }}" style="margin-bottom:12px;">
+    <button class="btn" type="submit">Send Check-in to All</button>
+  </form>
+
+  <!-- Members Grid -->
+  <div class="members-grid" id="membersGrid">
+    {% for m in members %}
+      <div class="card member-card is-collapsed"
+           role="button" tabindex="0" aria-expanded="false"
+           data-name="{{ (m.name or m.user_id)|lower }}"
+           data-status="{{ m.status_norm }}"
+           data-text='{{ ((m.latest_worked or "") ~ " " ~ (m.latest_next or "") ~ " " ~ (m.latest_blockers or "") ~ " " ~ ((m.tags|join(" ")) if m.tags else ""))|lower|e }}'>
+        <!-- Top row -->
+        <div class="member-top">
+          <a class="avatar" href="/member/{{ m.user_id }}" title="Open full history">
+            {% if m.avatar_url %}
+              <img src="{{ m.avatar_url }}" alt="{{ m.name or m.user_id }}">
+            {% else %}
+              {{ (m.name or m.user_id)|string|first|upper }}
+            {% endif %}
+          </a>
+          <div class="member-id">
+            <a class="member-name" href="/member/{{ m.user_id }}" style="text-decoration:none">{{ m.name if m.name else m.user_id }}</a>
+            <div class="muted">Last seen: {{ m.last_seen_human }}</div>
+          </div>
+          <div class="member-status">
+            {% if m.status == 'Blocked' %}
+              <span class="status-dot danger"></span><span class="status-text danger">Blocked</span>
+            {% elif m.status == 'On Track' %}
+              <span class="status-dot success"></span><span class="status-text success">On Track</span>
+            {% else %}
+              <span class="status-dot warn"></span><span class="status-text warn">Needs Check-in</span>
+            {% endif %}
+            <span class="chevron" aria-hidden="true">▾</span>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-row">
+          <div class="muted small">Progress</div>
+          <div class="wb-progress">
+            <div class="wb-progress-fill" {% if m.progress_pct is defined %}style="width: {{ m.progress_pct|default(0, true) }}%"{% endif %}></div>
+          </div>
+          <div class="muted small">{{ m.progress_pct|default(0, true) }}%</div>
+        </div>
+
+        <!-- Collapsible content -->
+        <div class="collapsible">
+          <div class="member-stats">
+            <div><div class="stat-number">{{ m.responses_count }}</div><div class="stat-label">Total updates</div></div>
+            <div><div class="stat-number">{{ m.blockers_count }}</div><div class="stat-label">Blockers</div></div>
+            <div><div class="stat-number">{{ m.history|length }}</div><div class="stat-label">History pts</div></div>
+          </div>
+
+          <div class="member-latest">
+            {% if m.latest_worked %}<div class="line">🛠️ <strong>Worked:</strong> {{ m.latest_worked }}</div>{% endif %}
+            {% if m.latest_next %}<div class="line">📌 <strong>Next:</strong> {{ m.latest_next }}</div>{% endif %}
+            <div class="line">🚧 <strong>Blockers:</strong>
+              {% if m.latest_blockers and m.latest_blockers|lower not in ['no blockers','no response','none','n/a'] %}
+                <span class="badge danger">{{ m.latest_blockers }}</span>
+              {% else %}<span class="muted">None</span>{% endif %}
+            </div>
+          </div>
+
+          <div class="muted small" style="margin-top:8px;">Recent responses</div>
+          <div class="recent-list">
+            {% if m.history_items and m.history_items|length %}
+              <ul class="recent-ul">
+                {% for it in m.history_items[:5] %}
+                  <li class="recent-item">
+                    <div class="recent-date">{{ it.date.strftime('%b %d, %Y') if it.date else '—' }}</div>
+                    <div class="recent-answer"><strong>Worked:</strong> {{ it.worked_on or 'No response' }}</div>
+                    <div class="recent-answer"><strong>Next:</strong> {{ it.next_up or 'No response' }}</div>
+                    <div class="recent-answer">
+                      <strong>Blockers:</strong>
+                      {% set btxt = (it.blockers or '')|lower %}
+                      {% if btxt and btxt not in ['no blockers','no response','none','n/a'] %}
+                        <span class="badge danger">{{ it.blockers }}</span>
+                      {% else %}<span class="muted">None</span>{% endif %}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="muted">No responses yet.</div>
+            {% endif %}
+          </div>
+
+          <div class="actions-row">
+            {% if m.status == 'Blocked' %}
+              <form method="post" action="/unblock/{{ m.user_id }}" style="display:inline;">
+                <button class="btn danger" type="submit">Create Unblock Thread</button>
+              </form>
+            {% else %}
+              <!-- Nudge now links to the nudge screen -->
+              <a href="/nudge/{{ m.user_id }}" class="btn">Nudge</a>
+            {% endif %}
+
+            {% if m.latest_blockers and m.latest_blockers|lower not in ['no blockers','no response','none','n/a'] and m.resp_id %}
+              <a href="/tag/{{ m.resp_id }}" class="btn purple">Tag / Assign</a>
+            {% endif %}
+
+            <!-- New: per-member Send Check-in button (POST) -->
+            <form method="post" action="/member/{{ m.user_id }}/send-checkin" style="display:inline;">
+              <button class="btn" type="submit">Send Check-in</button>
+            </form>
+
+            <a href="/member/{{ m.user_id }}" class="btn btn-ghost">View Full History</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <style>
+    .header-actions{display:flex;gap:10px;align-items:center}
+    .small{font-size:12px}
+    .members-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+    .member-card{padding:12px;border-radius:14px;cursor:pointer;transition:box-shadow .18s ease,transform .08s ease}
+    .member-card:focus{outline:2px solid #3b82f6;outline-offset:2px}
+    .member-card:hover{box-shadow:0 6px 18px rgba(0,0,0,.06)}
+    .member-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .avatar{width:32px;height:32px;border-radius:999px;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+    .avatar img{width:100%;height:100%;object-fit:cover;border-radius:999px}
+    .member-id{display:flex;flex-direction:column}
+    .member-name{font-weight:700;font-size:14px}
+    .member-status{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px}
+    .status-dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+    .status-dot.success{background:#22c55e}.status-text.success{color:#16a34a}
+    .status-dot.danger{background:#ef4444}.status-text.danger{color:#dc2626}
+    .status-dot.warn{background:#f59e0b}.status-text.warn{color:#d97706}
+    .chevron{margin-left:4px;transition:transform .18s ease;color:#6b7280}
+    .progress-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin:6px 0}
+    .wb-progress{height:8px;border-radius:999px;background:#eef2f7;overflow:hidden}
+    .wb-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#2563eb,#22c55e)}
+    .collapsible{display:none;margin-top:6px}
+    .member-card.is-expanded .collapsible{display:block}
+    .member-card.is-expanded .chevron{transform:rotate(180deg)}
+    .member-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0}
+    .stat-number{font-weight:800;font-size:15px}
+    .stat-label{font-size:11px;color:var(--muted,#6b7280)}
+    .member-latest .line{margin:6px 0;font-size:14px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+    .badge.danger{background:#fee2e2;color:#991b1b}
+    .recent-list{margin-top:6px}
+    .recent-ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+    .recent-item{padding:8px;border:1px solid #e5e7eb;border-radius:10px}
+    .recent-date{font-size:12px;color:#6b7280;margin-bottom:4px}
+    .recent-answer{font-size:14px}
+    .actions-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .btn.danger{background:#ef4444}.btn.purple{background:#a855f7}
+    .btn.btn-ghost{background:transparent;border:1px solid #e5e7eb}
+    body.dark .wb-progress{background:#475569}
+  </style>
+
+  <script>
+    const cards = Array.from(document.querySelectorAll('.member-card'));
+    const searchEl = document.getElementById('peopleSearch');
+    const statusEl = document.getElementById('statusFilter');
+    const countEl = document.getElementById('countSummary');
+
+    function norm(s){ return (s || '').toLowerCase().replace(/[_-]/g,' ').trim(); }
+
+    function applyFilters(){
+      const q = (searchEl.value || '').toLowerCase().trim();
+      const status = norm(statusEl.value);
+
+      let visible = 0;
+      cards.forEach(card => {
+        const name = card.getAttribute('data-name') || '';
+        const text = card.getAttribute('data-text') || '';
+        const st = norm(card.getAttribute('data-status') || '');
+        const show = (!q || name.includes(q) || text.includes(q)) && (!status || st === status);
+        card.style.display = show ? '' : 'none';
+        if (show) visible += 1;
+      });
+      countEl.textContent = `Showing ${visible} of ${cards.length}`;
+
+      const params = new URLSearchParams(window.location.search);
+      q ? params.set('q', q) : params.delete('q');
+      status ? params.set('status', status) : params.delete('status');
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+
+    function toggleCard(card, force){
+      const expanded = force !== undefined ? !!force : !card.classList.contains('is-expanded');
+      card.classList.toggle('is-expanded', expanded);
+      card.classList.toggle('is-collapsed', !expanded);
+      card.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+    cards.forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('a, button, input, select, textarea')) return;
+        toggleCard(card);
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(card); }
+      });
+    });
+
+    applyFilters();
+  </script>
+{% endblock %}

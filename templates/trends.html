@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Trends{% endblock %}
+
+{% block content %}
+<div class="dashboard-header" style="margin-bottom:10px;">
+  <div>
+    <h1>Trends</h1>
+    <p class="muted">Team signals across the last
+      <strong>{{ tf_weeks }}</strong> week{{ '' if tf_weeks==1 else 's' }}.</p>
+  </div>
+
+  <div class="header-actions" style="gap:10px; align-items:center;">
+    <form method="get" action="{{ url_for('trend') }}" style="display:flex;gap:8px;align-items:center;">
+      <label class="muted small">Timeframe</label>
+      <select class="input" name="w" style="min-width:120px">
+        <option value="4"  {{ 'selected' if tf_weeks==4  else '' }}>Last 4 weeks</option>
+        <option value="8"  {{ 'selected' if tf_weeks==8  else '' }}>Last 8 weeks</option>
+        <option value="12" {{ 'selected' if tf_weeks==12 else '' }}>Last 12 weeks</option>
+      </select>
+      <button class="btn" type="submit">Apply</button>
+    </form>
+
+    <!-- New: page-level filters -->
+    <div style="display:flex; gap:8px; align-items:center;">
+      <select id="userFilter" class="input" style="min-width:150px">
+        <option value="">All users</option>
+        {% for u, _c in tr.blockers_by_user %}
+          <option value="{{ u }}">{{ u }}</option>
+        {% endfor %}
+      </select>
+      <select id="tagFilter" class="input" style="min-width:150px">
+        <option value="">All tags</option>
+        {% if tr.tag_counts %}
+          {% for t, _n in tr.tag_counts %}
+            <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        {% endif %}
+      </select>
+      <label class="muted small" style="display:flex; gap:6px; align-items:center;">
+        <input id="maToggle" type="checkbox"/> 7-pt MA
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- KPIs with delta chips -->
+<div class="kpi-grid">
+  <div class="kpi-card kpi-blue">
+    <div class="kpi-label">Total Blockers</div>
+    <div class="kpi-number">
+      {{ tr.total_blockers }}
+      <span id="blkDelta" class="chip delta" style="margin-left:8px;">—</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-green">
+    <div class="kpi-label">Total Responses</div>
+    <div class="kpi-number">
+      {{ tr.total_responses }}
+      <span id="respDelta" class="chip delta" style="margin-left:8px;">—</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-red">
+    <div class="kpi-label">Blocker Rate</div>
+    <div class="kpi-number">
+      {{ (tr.blocker_rate*100)|round(1) }}%
+      <span id="rateDelta" class="chip delta" style="margin-left:8px;">—</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Last {{ min(tf_weeks,4) }} vs previous {{ min(tf_weeks,4) }}</div>
+    <div class="kpi-number">
+      {% if tr.change_pct is not none %}
+        {{ tr.change_pct }}%
+      {% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Optional anomaly callout -->
+<div id="anomalyNote" class="card accent-orange" style="display:none; margin-bottom:12px;">
+  📈 Heads up: This week’s blockers spiked above the recent average. Click the spike in “Weekly Blockers” to see who/what contributed.
+</div>
+
+<!-- Charts -->
+<div class="panel-grid">
+  <div class="card">
+    <h3>Weekly Blockers</h3>
+    <canvas id="weeklyChart" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h3>Blockers by User</h3>
+    <canvas id="userChart" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h3>Top Keywords (from blocker text)</h3>
+    <canvas id="kwChart" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h3>Blockers by Weekday</h3>
+    <canvas id="wdChart" height="120"></canvas>
+  </div>
+  {% if tr.tag_counts and tr.tag_counts|length %}
+  <div class="card">
+    <h3>Tags</h3>
+    <canvas id="tagChart" height="120"></canvas>
+  </div>
+  {% endif %}
+</div>
+
+<!-- AI Coach -->
+<div class="card accent-blue" style="margin-top:12px;">
+  <h3 style="margin:0 0 8px;">AI Coach</h3>
+  <ul class="suggestions" id="aiTips" style="margin:6px 0 0 18px;">
+    {% for s in ai_tips %}
+      <li style="margin:6px 0;">{{ s }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+/* ---------- Raw data from server ---------- */
+const weeklyLabels = {{ tr.week_labels|tojson|safe }};
+const weeklyCounts = {{ tr.weekly_counts|tojson }};
+const userLabelData = {{ tr.blockers_by_user|map(attribute=0)|list|tojson }};
+const userCountData = {{ tr.blockers_by_user|map(attribute=1)|list|tojson }};
+const kwLabels     = {{ tr.top_keywords|map(attribute=0)|list|tojson }};
+const kwCounts     = {{ tr.top_keywords|map(attribute=1)|list|tojson }};
+const wdCounts     = {{ tr.weekday_counts|tojson }};
+const tagLabels    = {{ (tr.tag_counts|map(attribute=0)|list) if tr.tag_counts else [] | tojson }};
+const tagCounts    = {{ (tr.tag_counts|map(attribute=1)|list) if tr.tag_counts else [] | tojson }};
+const wdLabels     = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+/* ---------- Helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function pctDelta(curr, prev){ if(prev===0) return curr===0 ? 0 : 100; return ((curr-prev)/prev*100).toFixed(1); }
+function movingAvg(arr, n=7){
+  if (!arr || arr.length < 2) return arr || [];
+  const out = [];
+  for (let i=0;i<arr.length;i++){
+    const s = Math.max(0, i-n+1), e = i+1;
+    const slice = arr.slice(s,e);
+    out.push( slice.reduce((a,b)=>a+b,0)/slice.length );
+  }
+  return out;
+}
+function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function stddev(arr){
+  const m = mean(arr);
+  const v = arr.reduce((a,b)=>a+(b-m)*(b-m),0)/arr.length;
+  return Math.sqrt(v);
+}
+
+/* ---------- Compute deltas for chips ---------- */
+(function(){
+  const windowSize = Math.min(weeklyCounts.length, 4);
+  const recent = weeklyCounts.slice(-windowSize).reduce((a,b)=>a+b,0);
+  const prev   = weeklyCounts.slice(-(2*windowSize), -windowSize).reduce((a,b)=>a+b,0) || 0;
+  const d = pctDelta(recent, prev);
+  const setChip = (el, v) => {
+    const n = Number(v);
+    el.textContent = (n>=0? '▲' : '▼') + Math.abs(n).toFixed(1) + '%';
+    el.classList.toggle('up', n>=0);
+    el.classList.toggle('down', n<0);
+  };
+  setChip($('blkDelta'), d);
+
+  // Rough proxies from what you expose today
+  setChip($('respDelta'), 0); // adjust if you add responses-over-time
+  setChip($('rateDelta'), d); // rate typically correlates with blockers
+})();
+
+/* ---------- Anomaly banner ---------- */
+(function(){
+  if (weeklyCounts.length < 4) return;
+  const avg = mean(weeklyCounts.slice(0,-1));
+  const sd  = stddev(weeklyCounts.slice(0,-1));
+  const latest = weeklyCounts[weeklyCounts.length-1];
+  if (latest > avg + 1.5*sd){ $('anomalyNote').style.display = 'block'; }
+})();
+
+/* ---------- Charts (with filter + MA toggle) ---------- */
+let weeklyChart, userChart, kwChart, wdChart, tagChart;
+const chartDefaults = { plugins:{legend:{display:false}}, responsive:true, maintainAspectRatio:false };
+
+function buildCharts(series){
+  if (weeklyChart) weeklyChart.destroy();
+  if (userChart)   userChart.destroy();
+  if (kwChart)     kwChart.destroy();
+  if (wdChart)     wdChart.destroy();
+  if (tagChart)    tagChart.destroy();
+
+  const useMA = $('maToggle').checked;
+  const weeklyData = useMA ? movingAvg(series.weeklyCounts) : series.weeklyCounts;
+
+  weeklyChart = new Chart($('weeklyChart'), {
+    type: 'line',
+    data: { labels: series.weeklyLabels, datasets: [{ label: 'Blockers', data: weeklyData, tension:.3 }] },
+    options: {
+      ...chartDefaults,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const i = els[0].index;
+        const week = series.weeklyLabels[i];
+        const params = new URLSearchParams({
+          week, user: $('userFilter').value || '', tag: $('tagFilter').value || ''
+        }).toString();
+        window.location.href = `/context?${params}`;
+      },
+      interaction: { intersect:false, mode:'nearest' },
+      scales: { y: { beginAtZero:true, ticks:{ precision:0 } } }
+    }
+  });
+
+  userChart = new Chart($('userChart'), {
+    type: 'bar',
+    data: { labels: series.userLabelData, datasets: [{ label:'Blockers', data: series.userCountData }] },
+    options: {
+      ...chartDefaults,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const name = series.userLabels[els[0].index];
+        $('userFilter').value = name;
+        applyFilters();
+      },
+      scales: { y: { beginAtZero:true, ticks:{ precision:0 } } }
+    }
+  });
+
+  kwChart = new Chart($('kwChart'), {
+    type: 'bar',
+    data: { labels: series.kwLabels, datasets: [{ label:'Mentions', data: series.kwCounts }] },
+    options: { ...chartDefaults, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+  });
+
+  wdChart = new Chart($('wdChart'), {
+    type: 'bar',
+    data: { labels: wdLabels, datasets: [{ label:'Blockers', data: series.wdCounts }] },
+    options: { ...chartDefaults, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+  });
+
+  if (tagLabels.length){
+    tagChart = new Chart($('tagChart'), {
+      type: 'doughnut',
+      data: { labels: series.tagLabels, datasets:[{ data: series.tagCounts }] },
+      options: chartDefaults
+    });
+  }
+}
+
+/* ---------- Filtering (client-side placeholders) ----------
+   If you already compute filtered series server-side, swap this
+   to fetch('/trend-data?user=X&tag=Y&w=...'). */
+function filteredSeries(){
+  // This template keeps your current data shape. Replace with real filtered data when backend is ready.
+  return {
+    weeklyLabels, weeklyCounts,
+    userLabelData,   userCountData,
+    kwLabels,     kwCounts,
+    wdCounts,
+    tagLabels,    tagCounts
+  };
+}
+function applyFilters(){ buildCharts( filteredSeries() ); }
+
+/* ---------- Wire-up ---------- */
+$('userFilter').addEventListener('change', applyFilters);
+$('tagFilter').addEventListener('change', applyFilters);
+$('maToggle').addEventListener('change', applyFilters);
+
+// Initial paint
+applyFilters();
+</script>
+{% endblock %}

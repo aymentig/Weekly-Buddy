@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Nudge {{ user.name or user.user_id }}{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+  <h1>Nudge — {{ user.name or user.user_id }}</h1>
+  <a class="btn" href="{{ url_for('member_detail', user_key=user.user_id) }}">← Back to Member</a>
+</div>
+
+<div class="card" style="padding:16px;">
+  <form method="post" style="display:grid; gap:12px; max-width:720px;">
+    <div>
+      <label class="muted small">Message preset</label>
+      <select class="input" name="kind" id="preset">
+        <option value="gentle">Gentle check-in</option>
+        <option value="blocker">Follow up on blocker</option>
+        <option value="deadline">Deadline reminder</option>
+        <option value="celebrate">Celebrate progress</option>
+      </select>
+    </div>
+    <div>
+      <label class="muted small">Custom message (optional)</label>
+      <textarea name="message" class="input" rows="4" placeholder="Write your own nudge…"></textarea>
+      <div class="muted small">If provided, this replaces the preset text.</div>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="escalate"> Also DM my manager (set MANAGER_SLACK_ID in .env)
+    </label>
+    <div style="display:flex; gap:8px;">
+      <button class="btn purple" type="submit">Send Nudge</button>
+      <a class="btn" href="{{ url_for('member_detail', user_key=user.user_id) }}">Cancel</a>
+    </div>
+  </form>
+
+  {% if latest %}
+  <div class="muted" style="margin-top:16px;">
+    <strong>Latest context:</strong>
+    <div>🛠️ {{ latest.worked_on or '—' }}</div>
+    <div>📌 {{ latest.next_up or '—' }}</div>
+    <div>🚧 {{ latest.blockers or '—' }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

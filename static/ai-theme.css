@@ -1,0 +1,92 @@
+/* Accent tokens used for subtle shadows/borders */
+:root{
+    --accent-1: #2563eb; /* blue */
+    --accent-2: #a855f7; /* purple */
+    --accent-3: #0ea5e9; /* cyan */
+  }
+  
+  /* Light theme is driven by style.css variables already. */
+  body{ background: var(--bg); color: var(--text); }
+  .content{ position:relative; z-index:1; }
+  
+  /* Sidebar gradient & crisp separators */
+  .sidebar{
+    background: linear-gradient(180deg, color-mix(in srgb, var(--slate-800) 92%, transparent),
+                                       color-mix(in srgb, var(--slate-800) 86%, transparent));
+    border-right: 1px solid #334155;
+  }
+  .sidebar h2{ letter-spacing:.2px; }
+  .sidebar a{ border:1px solid transparent; }
+  .sidebar a:hover, .sidebar a.active{ border-color: #334155; box-shadow: 0 0 0 4px rgba(148,163,184,.18); }
+  
+  /* Cards with crisp edges + depth */
+  .card{
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 20px rgba(0,0,0,.06);
+  }
+  .card:hover{ box-shadow: 0 10px 30px rgba(0,0,0,.10); }
+  
+  /* Buttons */
+  .btn{
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent-1) 20%, transparent);
+    border:1px solid color-mix(in srgb, var(--accent-1) 24%, transparent);
+  }
+  .btn.ghost{ background:transparent; color:inherit; border:1px solid #e5e7eb; }
+  .btn.ghost:hover{ background:rgba(0,0,0,.03); }
+  
+  /* Inputs */
+  .input{
+    background:#fff; border-color:#e5e7eb; color:inherit; box-shadow:none;
+  }
+  .input:focus{
+    outline: none; border-color: color-mix(in srgb, var(--accent-1) 40%, #cbd5e1);
+    box-shadow: 0 0 0 4px rgba(148,163,184,.18);
+  }
+  
+  /* Tables & lists */
+  .table th, .table td{ border-bottom-color: #eef2f7; }
+  .responses-list{ border:1px solid #eef2f7; border-radius:16px; padding:8px; background: #fff; }
+  
+  /* KPI/mini cards also look like cards */
+  .kpi-card, .mini-card{
+    background: #fff !important; border:1px solid #e5e7eb; box-shadow: 0 6px 20px rgba(0,0,0,.06);
+  }
+  
+  /* Badges remain punchy */
+  .badge.success{ background: linear-gradient(180deg, var(--green), color-mix(in srgb, var(--green) 70%, black)); }
+  .badge.danger{ background: linear-gradient(180deg, var(--red), color-mix(in srgb, var(--red) 70%, black)); }
+  
+  /* Dark theme overrides */
+  .dark body{
+    --bg: #0b0f19;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --card: #0f1525;
+    --card-brd: #1f2937;
+  }
+  
+  .dark .sidebar{
+    background: linear-gradient(180deg, #0b0f19 0%, #0d1426 100%);
+    border-right-color: var(--card-brd);
+  }
+  .dark .card{
+    background: var(--card) !important;
+    border: 1px solid var(--card-brd);
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+  }
+  .dark .card:hover{ box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  .dark .btn{ border-color: color-mix(in srgb, var(--accent-1) 25%, transparent); }
+  .dark .btn.ghost{ background:transparent; color:inherit; border:1px solid var(--card-brd); }
+  .dark .btn.ghost:hover{ background:color-mix(in srgb, var(--card) 85%, transparent); }
+  .dark .input{ background:var(--card); border-color:var(--card-brd); color:var(--text); }
+  .dark .input:focus{
+    border-color: color-mix(in srgb, var(--accent-1) 40%, var(--card-brd));
+    box-shadow: 0 0 0 4px rgba(148,163,184,.18);
+  }
+  .dark .table th, .dark .table td{ border-bottom-color: var(--card-brd); }
+  .dark .responses-list{ border-color: var(--card-brd); background: var(--card); }
+  .dark .kpi-card, .dark .mini-card{ background: var(--card) !important; border:1px solid var(--card-brd); }
+  .dark .avatar{ box-shadow: 0 0 0 2px var(--card); outline: 2px solid var(--card-brd); }
+  .dark .member-card:hover{ box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+  .dark .status-text{ color: var(--muted); }
+  

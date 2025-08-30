@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Context & Meeting Logic{% endblock %}
+
+{% block content %}
+  <div class="dashboard-header">
+    <div>
+      <h1>Context & Meeting Logic</h1>
+      <p class="muted">Tune when WeeklyBuddy suggests meetings, and add notes managers should consider.</p>
+    </div>
+  </div>
+
+  <form method="POST" class="grid-form" style="max-width:700px; margin:auto;">
+    <div class="card accent-blue">
+      <label class="label">Blocker Threshold</label>
+      <input class="input" type="number" min="0" name="blocker_threshold" value="{{ policy.blocker_threshold }}">
+      <p class="muted">If total blockers in a period are ≥ this number, WeeklyBuddy will recommend an extra meeting.</p>
+    </div>
+
+    <div class="card accent-green">
+      <label class="label">Stale Days Threshold</label>
+      <input class="input" type="number" min="1" name="stale_days_threshold" value="{{ policy.stale_days_threshold }}">
+      <p class="muted">If no new responses for this many days, suggest a check-in.</p>
+    </div>
+
+    <div class="card accent-purple">
+      <label class="label">Context Notes</label>
+      <textarea class="input" name="notes" rows="6" placeholder="Examples: holidays, launches, org changes, priorities…">{{ policy.notes }}</textarea>
+      <p class="muted">Used by the dashboard to explain why a meeting is (or isn’t) recommended.</p>
+    </div>
+
+    <button class="btn full" type="submit">Save Context</button>
+  </form>
+{% endblock %}

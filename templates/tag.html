@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Tag / Assign{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+  <h1>Tag / Assign</h1>
+  <a class="btn" href="{{ url_for('person') }}">← Back to Team</a>
+</div>
+
+<div class="card" style="padding:16px; margin-bottom:16px;">
+  <h3 style="margin:0 0 8px;">Response</h3>
+  <div class="muted small">ID: {{ resp.id }}</div>
+  <div style="margin-top:10px;">
+    <div><strong>Worked:</strong> {{ resp.worked_on or '—' }}</div>
+    <div><strong>Next:</strong> {{ resp.next_up or '—' }}</div>
+    <div><strong>Blockers:</strong> {{ resp.blockers or '—' }}</div>
+  </div>
+</div>
+
+<form class="card" method="post" style="padding:16px;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div>
+      <h3 style="margin:0 0 8px;">Tags</h3>
+      {% if tags and tags|length %}
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          {% for t in tags %}
+            <label class="chip" style="cursor:pointer;">
+              <input type="checkbox" name="tag_ids" value="{{ t.id }}" {% if t.id in selected_tag_ids %}checked{% endif %}>
+              #{{ t.name }}
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="muted">No tags yet.</div>
+      {% endif %}
+      <div style="margin-top:10px;">
+        <label class="muted small">Add new tags (comma separated)</label>
+        <input class="input" type="text" name="new_tags" placeholder="backend, data, ops">
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin:0 0 8px;">Assign teammates</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:6px;">
+        {% for u in users %}
+          <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" name="assignees" value="{{ u.id }}" {% if u.id in selected_user_ids %}checked{% endif %}>
+            {{ u.name or u.slack_id or u.id }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px; display:flex; gap:8px;">
+    <button type="submit" class="btn purple">Save</button>
+    <a class="btn" href="{{ url_for('person') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

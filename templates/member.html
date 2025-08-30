@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Member — {{ member.name or member.user_id }}{% endblock %}
+
+{% block content %}
+
+<!-- Top: Member + quick actions -->
+<div class="card member-hero">
+  <div class="hero-left">
+    <div class="avatar-bubble">{{ (member.name or 'U')[:1] | upper }}</div>
+    <div>
+      <h1 class="hero-title">Member — {{ member.name or member.user_id }}</h1>
+      <div class="muted">A colorful snapshot of recent check-ins, signals, and actions.</div>
+    </div>
+  </div>
+  <div class="hero-actions">
+    <a class="btn ghost" href="{{ url_for('person') }}">← Back to Team</a>
+    <a class="btn ghost" href="{{ url_for('member_export_csv', user_key=member.user_id) }}">Download CSV</a>
+    <a class="btn" href="{{ url_for('nudge', user_key=member.user_id) }}">Nudge</a>
+    <form method="post" action="{{ url_for('send_checkin', user_key=member.user_id) }}" style="display:inline;">
+      <button class="btn" type="submit">Send Check-in</button>
+    </form>
+  </div>
+</div>
+
+{% if archiving_supported %}
+  <!-- Archive filter tabs -->
+  <div class="tabs" style="margin:8px 0 12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn btn-ghost {% if (show or 'active') == 'active' %}is-active{% endif %}"
+       href="{{ url_for('member_detail', user_key=member.user_id, show='active') }}">Active</a>
+    <a class="btn btn-ghost {% if (show or 'active') == 'archived' %}is-active{% endif %}"
+       href="{{ url_for('member_detail', user_key=member.user_id, show='archived') }}">Archived</a>
+    <a class="btn btn-ghost {% if (show or 'active') == 'all' %}is-active{% endif %}"
+       href="{{ url_for('member_detail', user_key=member.user_id, show='all') }}">All</a>
+    <form method="post" action="{{ url_for('member_bulk_archive', user_key=member.user_id) }}" class="mh-form" style="margin-left:auto; display:flex;gap:8px;align-items:center;">
+      <label class="muted small">Bulk: archive older than</label>
+      <select class="input" name="older_than_days" style="min-width:140px;">
+        <option value="30">30 days</option>
+        <option value="60">60 days</option>
+        <option value="90" selected>90 days</option>
+        <option value="180">180 days</option>
+        <option value="365">1 year</option>
+      </select>
+      <button class="btn danger" type="submit">Archive</button>
+    </form>
+  </div>
+{% endif %}
+
+<!-- Status strip -->
+{% set status = 'On Track' %}
+{% set status_tone = 'ok' %}
+{% if metrics.last_blocker_days_ago is not none and metrics.last_blocker_days_ago <= 7 %}
+  {% set status = 'Blocked recently' %}
+  {% set status_tone = 'danger' %}
+{% elif metrics.avg_interval_days is none or metrics.avg_interval_days > 7 %}
+  {% set status = 'Needs check-in' %}
+  {% set status_tone = 'warn' %}
+{% endif %}
+
+<div class="status-strip {{ status_tone }}">
+  <div class="dot"></div>
+  <div class="status-text"><strong>Status:</strong> {{ status }}</div>
+  <div class="spacer"></div>
+  <div class="status-help muted">
+    {% if status_tone == 'danger' %}
+      Saw a blocker in the last 7 days. Consider a quick unblock.
+    {% elif status_tone == 'warn' %}
+      Average gap > 7 days. A gentle nudge could help.
+    {% else %}
+      Posting regularly and no recent blockers. 🎉
+    {% endif %}
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+  <div class="kpi kpi-blue">
+    <div class="kpi-top">
+      <div class="kpi-label">Total updates</div>
+      <div class="i" data-tip="How many check-ins we’ve captured for this person.">?</div>
+    </div>
+    <div class="kpi-num">{{ metrics.total }}</div>
+    <div class="kpi-foot muted">Lifetime</div>
+  </div>
+
+  <div class="kpi kpi-green">
+    <div class="kpi-top">
+      <div class="kpi-label">Streak (weeks)</div>
+      <div class="i" data-tip="Consecutive weeks with at least one update. Higher is better.">?</div>
+    </div>
+    <div class="kpi-num">{{ metrics.streak_weeks }}</div>
+    <div class="kpi-foot muted">Consistency</div>
+  </div>
+
+  <div class="kpi kpi-purple">
+    <div class="kpi-top">
+      <div class="kpi-label">Avg gap (days)</div>
+      <div class="i" data-tip="Average days between check-ins. Lower means more frequent updates.">?</div>
+    </div>
+    <div class="kpi-num">{{ metrics.avg_interval_days if metrics.avg_interval_days is not none else '—' }}</div>
+    <div class="kpi-foot muted">
+      {% if metrics.avg_interval_days is not none %}
+        Target ≤ 7
+      {% else %}Not enough data{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi kpi-orange">
+    <div class="kpi-top">
+      <div class="kpi-label">Blocker rate</div>
+      <div class="i" data-tip="Percent of updates that included a blocker.">?</div>
+    </div>
+    <div class="kpi-num">{{ (metrics.blocker_rate * 100) | int }}%</div>
+    <div class="kpi-foot muted">
+      {% if metrics.blocker_rate >= 0.5 %}High — investigate{% elif metrics.blocker_rate == 0 %}None lately{% else %}Moderate{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi kpi-red">
+    <div class="kpi-top">
+      <div class="kpi-label">Last blocker</div>
+      <div class="i" data-tip="Days since their most recent blocker.">?</div>
+    </div>
+    <div class="kpi-num">
+      {{ (metrics.last_blocker_days_ago ~ 'd') if metrics.last_blocker_days_ago is not none else '—' }}
+    </div>
+    <div class="kpi-foot muted">Lower is more recent</div>
+  </div>
+
+  <div class="kpi kpi-sky">
+    <div class="kpi-top">
+      <div class="kpi-label">Avg answer length</div>
+      <div class="i" data-tip="Average characters per check-in across all questions.">?</div>
+    </div>
+    <div class="kpi-num">{{ metrics.avg_answer_len }}</div>
+    <div class="kpi-foot muted">Richer updates tend to be longer</div>
+  </div>
+</div>
+
+<!-- Hints -->
+<div class="card insights">
+  <div class="ins-title">AI-ish Hints</div>
+  <ul>
+    {% if metrics.total == 0 %}
+      <li>They haven’t posted yet — try a friendly <a href="{{ url_for('nudge', user_key=member.user_id) }}">nudge</a>.</li>
+    {% endif %}
+    {% if metrics.avg_interval_days and metrics.avg_interval_days > 7 %}
+      <li>Average gap is {{ metrics.avg_interval_days }} days — consider a recurring reminder.</li>
+    {% endif %}
+    {% if metrics.blocker_rate >= 0.5 %}
+      <li>Blockers appear in over half of updates — schedule a quick unblocking sync.</li>
+    {% elif metrics.blocker_rate == 0 and metrics.total > 0 %}
+      <li>No blockers lately — keep cadence lightweight 👍</li>
+    {% endif %}
+    <li>Use tags on blockers (e.g., “backend”, “data”, “ops”) to route quickly and spot themes.</li>
+  </ul>
+</div>
+
+<!-- Questions -->
+<div class="card q-card">
+  <div class="q-head">
+    <div class="q-title">Current Questions</div>
+    <div class="muted">These map to <b>worked_on</b>, <b>next_up</b>, and <b>blockers</b>.</div>
+  </div>
+  <ol class="q-list">
+    {% for q in questions %}
+      <li>
+        <span class="q-idx">{{ loop.index }}️⃣</span>
+        <span class="q-text">{{ q.text }}</span>
+        {% if q.tag %}<span class="q-tag">{{ q.tag }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</div>
+
+<!-- Manage history helper card -->
+<div class="card" style="padding:14px; margin-top:12px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px; flex-wrap:wrap;">
+    <div>
+      <h3 style="margin:0 0 4px;">Manage history</h3>
+      <div class="muted small">Archiving hides updates from the Active view but keeps them for export/audit.</div>
+    </div>
+    {% if not archiving_supported %}
+      <div class="flash" style="background:#fefce8;border:1px solid #fde68a; color:#713f12; padding:8px 10px; border-radius:10px;">
+        Archiving is unavailable — add <code>archived_at</code> to <code>Response</code> to enable.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Recent check-ins -->
+<div class="history">
+  {% for r in rows %}
+    <div class="h-card card {% if r.archived %}is-archived{% endif %}">
+      <div class="h-top">
+        <div class="date-pill">
+          {{ r.created_at.strftime('%b %d, %Y') if r.created_at else '—' }}
+        </div>
+        <div class="tags">
+          {% for t in r.tags %}
+            <span class="tag-chip">#{{ t }}</span>
+          {% endfor %}
+          {% if r.archived %}<span class="tag-chip" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">ARCHIVED</span>{% endif %}
+        </div>
+        <div class="grow"></div>
+        {% if archiving_supported %}
+          {% if r.archived %}
+            <form method="post" action="{{ url_for('response_unarchive', resp_id=r.resp_id) }}">
+              <button class="btn tiny ghost" type="submit">Unarchive</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('response_archive', resp_id=r.resp_id) }}" onsubmit="return confirm('Archive this entry? You can still export it later.');">
+              <button class="btn tiny ghost" type="submit">Archive</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a class="btn tiny ghost" href="{{ url_for('nudge', user_key=member.user_id) }}">Nudge</a>
+      </div>
+      <div class="answers">
+        {% if r.answers|length > 0 %}
+          <div class="a-line"><span class="num">1️⃣</span><span class="a-text">{{ r.answers[0] or '—' }}</span></div>
+        {% endif %}
+        {% if r.answers|length > 1 %}
+          <div class="a-line"><span class="num">2️⃣</span><span class="a-text">{{ r.answers[1] or '—' }}</span></div>
+        {% endif %}
+        {% if r.answers|length > 2 %}
+          <div class="a-line"><span class="num">3️⃣</span><span class="a-text">{{ r.answers[2] or '—' }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card empty">
+      <div class="muted">No check-ins yet. When this teammate submits updates, they’ll appear here.</div>
+    </div>
+  {% endfor %}
+</div>
+
+<style>
+/* ======= Page styles ======= */
+.member-hero{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 18px; }
+.hero-left{ display:flex; align-items:center; gap:14px; }
+.avatar-bubble{ width:46px; height:46px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:800; background:linear-gradient(180deg,#60a5fa,#34d399); color:white; box-shadow:0 6px 16px rgba(0,0,0,.10); }
+.hero-title{ margin:0; }
+.hero-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.tabs .btn{ border:1px solid #e5e7eb; }
+.tabs .is-active{ border-color:#3b82f6; color:#1d4ed8; }
+
+/* Status strip */
+.status-strip{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; margin:10px 0 12px; border:1px solid var(--card-brd); background:linear-gradient(180deg,#ffffff,#f6f8fb); }
+.status-strip .dot{ width:10px; height:10px; border-radius:999px; }
+.status-strip.ok .dot{ background:#22c55e; }
+.status-strip.warn .dot{ background:#f59e0b; }
+.status-strip.danger .dot{ background:#ef4444; }
+.status-strip .spacer{ flex:1; }
+
+/* KPI grid */
+.kpi-grid{ display:grid; grid-template-columns: repeat(6, minmax(160px,1fr)); gap:12px; margin-bottom:14px; }
+@media (max-width: 1200px){ .kpi-grid{ grid-template-columns: repeat(2,1fr); } }
+.kpi{ border-radius:16px; padding:14px; color:#0b1220; position:relative; border:1px solid var(--card-brd); background: var(--card); overflow: visible; }
+.kpi-blue{  background:linear-gradient(180deg,#eff6ff, #ffffff 55%); }
+.kpi-green{ background:linear-gradient(180deg,#ecfdf5, #ffffff 55%); }
+.kpi-purple{background:linear-gradient(180deg,#f5f3ff,#ffffff 55%); }
+.kpi-orange{background:linear-gradient(180deg,#fff7ed,#ffffff 55%); }
+.kpi-red{   background:linear-gradient(180deg,#fee2e2,#ffffff 55%); }
+.kpi-sky{   background:linear-gradient(180deg,#f0f9ff,#ffffff 55%); }
+.kpi-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.kpi-label{ font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#64748b; }
+.kpi-num{ font-size:28px; font-weight:800; margin:4px 0 2px; }
+.kpi-foot{ font-size:12px; }
+
+/* Tooltips */
+.i{ width:18px; height:18px; border-radius:999px; background:#e5e7eb; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; cursor:default; position:relative; z-index:10; }
+.i:hover::after{ content: attr(data-tip); position:absolute; left:50%; transform:translateX(-50%); bottom:125%; background:#0b1220; color:#fff; padding:8px 10px; border-radius:8px; white-space:nowrap; font-size:12px; box-shadow:0 10px 24px rgba(0,0,0,.22); z-index:9999; pointer-events:none; }
+
+/* Insights */
+.insights{ padding:14px; }
+.ins-title{ font-weight:800; margin-bottom:8px; }
+.insights ul{ margin:0 0 0 18px; }
+.insights li{ margin:6px 0; }
+
+/* Questions */
+.q-card{ padding:14px; margin:10px 0; }
+.q-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.q-title{ font-weight:800; }
+.q-list{ margin:0 0 0 20px; }
+.q-list li{ margin:6px 0; }
+.q-idx{ margin-right:6px; font-weight:700; }
+.q-tag{ margin-left:8px; font-size:12px; color:#475569; background:#eef2f7; padding:2px 8px; border-radius:999px; }
+
+/* History */
+.history{ display:grid; gap:12px; }
+.h-card{ padding:14px; }
+.h-card.is-archived{ opacity:.85; }
+.h-top{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.date-pill{ padding:6px 10px; border-radius:999px; border:1px solid var(--card-brd); background: linear-gradient(180deg,#ffffff,#f7f9fc); font-weight:700; font-size:12px; }
+.tags{ display:flex; gap:6px; flex-wrap:wrap; }
+.tag-chip{ padding:4px 8px; border-radius:999px; background:#eef2f7; border:1px solid var(--card-brd); font-size:12px; }
+.grow{ flex:1; }
+.answers{ display:grid; gap:8px; }
+.a-line{ display:flex; gap:10px; align-items:flex-start; }
+.num{ width:22px; text-align:center; font-size:16px; }
+.a-text{ white-space:pre-wrap; }
+
+/* Small buttons */
+.btn.tiny{ padding:8px 10px; font-size:12px; }
+
+/* Empty state */
+.card.empty{ padding:18px; text-align:center; }
+
+/* Dark tweaks */
+body.dark .kpi-label{ color:#94a3b8; }
+body.dark .i{ background:#334155; color:#e5e7eb; }
+body.dark .q-tag{ background:#1f2937; color:#cbd5e1; }
+</style>
+
+{% endblock %}

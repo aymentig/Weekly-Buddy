@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}WeeklyBuddy Dashboard{% endblock %}
+
+{% block content %}
+  <!-- Header / Action bar -->
+  <div class="dashboard-header">
+    <div>
+      <h1>{{ settings.bot_name }} — Dashboard</h1>
+      <p class="muted">Weekly team pulse at a glance</p>
+    </div>
+
+  </div>
+
+  <!-- Six compact boxes -->
+  <div class="mini-grid">
+    <!-- 1) Blockers by Person (mini bar) -->
+    <div class="mini-card card">
+      <div class="mini-title">Blockers by Person</div>
+      <canvas id="miniBlockers"></canvas>
+    </div>
+
+    <!-- 2) Responses by Person (mini bar: 1 if submitted latest, else 0) -->
+    <div class="mini-card card">
+      <div class="mini-title">Responses by Person</div>
+      <canvas id="miniResponses"></canvas>
+    </div>
+
+    <!-- 3) Weekly Blockers (mini line) -->
+    <div class="mini-card card">
+      <div class="mini-title">Weekly Blockers</div>
+      <canvas id="miniWeekly"></canvas>
+    </div>
+
+    <!-- 4) Blocker Rate (doughnut) -->
+    <div class="mini-card card">
+      <div class="mini-title">Blocker Rate</div>
+      <div class="mini-stat">
+        <span class="big">{{ (metrics.blocker_rate * 100) | round(0) }}%</span>
+        <span class="muted">of team with blockers</span>
+      </div>
+      <canvas id="miniRate"></canvas>
+    </div>
+
+    <!-- 5) Active This Week -->
+    <div class="mini-card card">
+      <div class="mini-title">Active This Week</div>
+      <div class="mini-stat">
+        <span class="big">{{ metrics.active_this_week }}</span>
+        <span class="muted">out of {{ metrics.team_size }}</span>
+      </div>
+    </div>
+
+    <!-- 6) Stale Users -->
+    <div class="mini-card card">
+      <div class="mini-title">Stale Users</div>
+      <div class="mini-stat">
+        <span class="big">{{ metrics.stale_users_count }}</span>
+        <span class="muted">need a nudge</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Big AI Suggestions panel -->
+  <div class="card" style="margin-top:18px;">
+    <h3 style="margin-top:0;">AI Suggestions</h3>
+    <ul class="suggestions">
+      {% for s in suggestions %}
+        <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Team Responses list with dates + Tag/Assign -->
+  <div class="card" style="margin-top:18px;">
+    <h3>Team Responses (with dates)</h3>
+    <div class="responses-list">
+      {% for user in users %}
+        <div class="response-item">
+          <div class="response-title">
+            {{ user.name if user.name else user.user_id }}
+            {% if user.resp_id %}
+              <a href="/tag/{{ user.resp_id }}" class="btn" style="padding:6px 10px; font-size:12px; margin-left:8px;">Tag / Assign</a>
+            {% endif %}
+          </div>
+          <div class="muted" style="margin-bottom:6px;">
+            🕒 {{ user.ts.strftime('%b %d, %Y %I:%M %p') if user.ts else 'No date available' }}
+          </div>
+          <div class="response-line">🛠️ <strong>Worked on:</strong> {{ user.answers[0] if user.answers|length > 0 else "No response" }}</div>
+          <div class="response-line">📌 <strong>Next:</strong> {{ user.answers[1] if user.answers|length > 1 else "No response" }}</div>
+          <div class="response-line">🚧 <strong>Blockers:</strong>
+            {% if user.answers|length > 2 and user.answers[2] != "No response" %}
+              <span class="badge danger">{{ user.answers[2] }}</span>
+            {% else %}
+              <span class="muted">None</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // Bot toggle
+    const botToggle = document.getElementById('botToggle');
+    if (botToggle) {
+      botToggle.addEventListener('change', async (e) => {
+        const on = e.target.checked;
+        try { await fetch(on ? '/bot/start' : '/bot/stop', { method: 'POST' }); }
+        catch (err) { console.error('Bot toggle failed', err); }
+        finally { location.reload(); }
+      });
+    }
+
+    // 1) Blockers by Person (mini)
+    const miniBlockersCtx = document.getElementById('miniBlockers').getContext('2d');
+    new Chart(miniBlockersCtx, {
+      type: 'bar',
+      data: {
+        labels: [{% for u in users %}"{{ u.name if u.name else u.user_id }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+          label: 'Blockers',
+          data: [{% for u in users %}{{ 1 if u.answers|length > 2 and u.answers[2] != "No response" else 0 }}{% if not loop.last %}, {% endif %}{% endfor %}],
+          backgroundColor: '#ef4444'
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision:0 } } } }
+    });
+
+    // 2) Responses by Person (mini): 1 if any answer is not "No response", else 0
+    const miniResponsesCtx = document.getElementById('miniResponses').getContext('2d');
+    new Chart(miniResponsesCtx, {
+      type: 'bar',
+      data: {
+        labels: [{% for u in users %}"{{ u.name if u.name else u.user_id }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+          label: 'Submitted',
+          data: [{% for u in users %}
+            {{ 1 if (u.answers and (u.answers[0] != 'No response' or u.answers[1] != 'No response' or u.answers[2] != 'No response')) else 0 }}
+            {% if not loop.last %}, {% endif %}
+          {% endfor %}],
+          backgroundColor: '#2563eb'
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision:0 } } } }
+    });
+
+    // 3) Weekly Blockers (mini line)
+    const miniWeeklyCtx = document.getElementById('miniWeekly').getContext('2d');
+    new Chart(miniWeeklyCtx, {
+      type: 'line',
+      data: {
+        labels: [{% for l in week_labels %}"{{ l }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+          label: 'Blockers',
+          data: [{% for c in week_counts %}{{ c }}{% if not loop.last %}, {% endif %}{% endfor %}],
+          fill: false,
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // 4) Blocker Rate (doughnut)
+    const miniRateCtx = document.getElementById('miniRate').getContext('2d');
+    const rate = {{ metrics.blocker_rate }};
+    new Chart(miniRateCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['With Blockers', 'No Blockers'],
+        datasets: [{ data: [Math.round(rate*100), Math.max(0, 100 - Math.round(rate*100))] }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } }, cutout: '70%' }
+    });
+  </script>
+{% endblock %}

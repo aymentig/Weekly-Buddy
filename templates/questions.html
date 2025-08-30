@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Questions{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="sfx-h1">Questions</h1>
+    <p class="sfx-sub">These appear in Slack each week in this order.</p>
+  </div>
+  <a class="btn" href="{{ url_for('dashboard') }}" title="Go back to dashboard">← Back to Dashboard</a>
+</div>
+
+<!-- Current order -->
+<div class="card sfx-panel">
+  <div class="sfx-panel-title">Current order</div>
+  <div class="q-list">
+    {% for q in questions %}
+    <form method="post" class="q-row">
+      <input type="hidden" name="action" value="update">
+      <input type="hidden" name="id" value="{{ q.id }}">
+
+      <div class="field">
+        <label class="sfx-label" for="pos-{{ q.id }}">Position</label>
+        <input id="pos-{{ q.id }}" class="input" type="number" min="1" name="position" value="{{ q.position or 0 }}" title="Order in Slack"/>
+      </div>
+
+      <div class="field grow">
+        <label class="sfx-label" for="text-{{ q.id }}">Question</label>
+        <div class="row-field">
+          <button class="icon-btn" type="button" data-emoji-insert title="Insert emoji">😀</button>
+          <input id="text-{{ q.id }}" class="input" type="text" name="text" value="{{ q.text }}" placeholder="Type the question…" data-question-input/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="sfx-label" for="cat-{{ q.id }}">Category (optional)</label>
+        <input id="cat-{{ q.id }}" class="input" name="category" value="{{ q.tag or '' }}" placeholder="e.g., status / plan / blockers"/>
+      </div>
+
+      <div class="field center">
+        <label class="sfx-label">Active</label>
+        <label class="switch-mini" title="Toggle whether this question is asked">
+          <input type="checkbox" class="active-toggle" name="active" {% if q.active %}checked{% endif %}>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="field actions">
+        <button class="btn" type="submit" title="Save changes">Save</button>
+        <!-- Separate delete form (not nested) -->
+        <form method="post">
+          <input type="hidden" name="action" value="delete"/>
+          <input type="hidden" name="id" value="{{ q.id }}"/>
+          <button class="btn danger" type="submit" title="Delete this question">Delete</button>
+        </form>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+
+  <div class="muted small" style="margin-top:8px;">Tip: change “Position” to reorder; toggle “Active” to hide/show.</div>
+</div>
+
+<!-- Add a question -->
+<div class="card sfx-panel">
+  <div class="sfx-panel-title">Add a question</div>
+  <form method="post" class="q-row add">
+    <input type="hidden" name="action" value="add">
+
+    <div class="field grow">
+      <label class="sfx-label" for="add-text">Question</label>
+      <div class="row-field">
+        <button class="icon-btn" type="button" data-emoji-insert title="Insert emoji">😀</button>
+        <input id="add-text" class="input" name="text" placeholder="Type the question…" data-question-input/>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="sfx-label" for="add-cat">Category</label>
+      <input id="add-cat" class="input" name="category" placeholder="Optional"/>
+    </div>
+
+    <div class="field actions">
+      <label class="sfx-label" style="visibility:hidden;">Add</label>
+      <button class="btn purple" type="submit" title="Add this question">Add</button>
+    </div>
+  </form>
+</div>
+
+<!-- Slack preview -->
+<div class="card sfx-panel">
+  <div class="sfx-panel-title">Slack preview</div>
+  <div class="muted small">How the weekly check-in will look:</div>
+  <div class="preview-box">
+    {% for q in questions if q.active %}
+      <div class="preview-line">• {{ q.text }}</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Emoji pop -->
+<div id="emoji-pop" class="card emoji-pop">
+  <div class="emoji-grid">
+    {% set emojis = '😀,😄,😁,😅,😂,🙂,😉,😍,🤩,😎,🤔,✅,❗,❓,🧱,🛠️,📌,🚧,📈,📉,📊,📝,💬,🗓️' %}
+    {% for e in emojis.split(',') %}
+      <button type="button" class="emoji-btn">{{ e }}</button>
+    {% endfor %}
+  </div>
+</div>
+
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
+  .sfx-h1{font-size:26px;font-weight:800;letter-spacing:.2px;margin:0}
+  .sfx-sub{margin:.25rem 0 0;color:#64748b}
+  .sfx-panel{padding:14px;margin-bottom:14px}
+  .sfx-panel-title{font-weight:800;margin-bottom:8px}
+  .sfx-label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:4px;display:block}
+
+  .q-list{display:flex;flex-direction:column;gap:10px}
+  .q-row{display:grid;grid-template-columns:120px 1fr 260px 110px 200px;gap:10px;align-items:end;border:1px solid #eef2f7;border-radius:12px;padding:10px;background:#fff}
+  .q-row.add{grid-template-columns:1fr 260px 200px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.grow{flex:1}
+  .field.center{align-items:center}
+  .field.actions{display:flex;flex-direction:row;gap:8px;align-items:center}
+  .row-field{display:flex;gap:8px;align-items:center}
+  .icon-btn{width:34px;height:34px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .preview-box{margin-top:10px;border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}
+  .preview-line{margin:6px 0}
+
+  .switch-mini{position:relative;display:inline-block;width:46px;height:26px}
+  .switch-mini input{opacity:0;width:0;height:0}
+  .switch-mini span{position:absolute;inset:0;background:#e5e7eb;border-radius:999px;transition:.2s}
+  .switch-mini span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+  .switch-mini input:checked + span{background:#22c55e}
+  .switch-mini input:checked + span:before{transform:translateX(20px)}
+
+  /* Emoji pop */
+  .emoji-pop{position:absolute;display:none;padding:8px;z-index:50}
+  .emoji-grid{display:grid;grid-template-columns:repeat(8,28px);gap:6px;font-size:18px}
+  .emoji-btn{width:28px;height:28px;line-height:28px;text-align:center;border:1px solid #e5e7eb;border-radius:6px;background:#fff;cursor:pointer}
+
+  /* Dark tweaks */
+  body.dark .q-row, body.dark .preview-box{background:#334155;border-color:#475569}
+  body.dark .icon-btn{background:#1f2937;border-color:#475569}
+</style>
+
+<script>
+(function(){
+  let lastFocused = null;
+  document.addEventListener('focusin', (e)=>{
+    if (e.target.matches('[data-question-input]')) lastFocused = e.target;
+  });
+
+  const pop = document.getElementById('emoji-pop');
+  let currentInput = null;
+  function showPop(el, btn){
+    const r = btn.getBoundingClientRect();
+    pop.style.left = (window.scrollX + r.left) + 'px';
+    pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
+    pop.style.display = 'block';
+    currentInput = el;
+  }
+  function hidePop(){ pop.style.display='none'; currentInput=null; }
+
+  document.querySelectorAll('[data-emoji-insert]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const input = btn.parentElement.querySelector('[data-question-input]') || lastFocused;
+      if (input) showPop(input, btn);
+    });
+  });
+
+  pop.addEventListener('click', (e)=>{
+    const b = e.target.closest('.emoji-btn');
+    if (!b) return;
+    const input = currentInput || lastFocused;
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + b.textContent + input.value.slice(end);
+    const pos = start + b.textContent.length;
+    input.setSelectionRange(pos, pos);
+    input.focus();
+  });
+
+  document.addEventListener('click', (e)=>{
+    if (!pop.contains(e.target) && !e.target.matches('[data-emoji-insert]')) hidePop();
+  });
+
+  // Auto-save when Active toggles
+  document.querySelectorAll('.active-toggle').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const form = cb.closest('form.q-row');
+      if (form) form.requestSubmit();
+    });
+  });
+})();
+</script>
+{% endblock %}

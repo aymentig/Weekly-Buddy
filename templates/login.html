@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Login — WeeklyBuddy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="/static/style.css" rel="stylesheet">
+  </head>
+  <body style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f8fafc;">
+    <form method="post" class="card" style="width:360px;padding:20px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.06);background:white;">
+      <h2 style="margin:0 0 12px 0;">WeeklyBuddy Login</h2>
+      <p class="muted" style="margin-top:0;">Enter the admin password</p>
+      <div style="margin:12px 0;">
+        <input type="password" name="password" placeholder="Password" class="input" style="width:100%;">
+      </div>
+      <button class="btn" type="submit" style="width:100%;">Sign in</button>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul style="margin-top:12px;padding-left:16px;">
+            {% for cat, msg in messages %}
+              <li>{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+    </form>
+  </body>
+</html>

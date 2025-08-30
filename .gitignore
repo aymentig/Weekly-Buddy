@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python cache / build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+
+# Flask instance & database
+instance/
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+
+# VSCode / IDE configs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# System files
+*.swp
+*.swo
